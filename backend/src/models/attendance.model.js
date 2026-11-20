@@ -1,6 +1,6 @@
+
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
-
 
 const Attendance = sequelize.define(
   "Attendance",
@@ -12,11 +12,7 @@ const Attendance = sequelize.define(
     },
     user_id: {
       type: DataTypes.STRING(50),
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'user_id'
-      }
+      allowNull: false
     },
     date: {
       type: DataTypes.DATEONLY,
@@ -31,9 +27,9 @@ const Attendance = sequelize.define(
       allowNull: true
     },
     status: {
-      type: DataTypes.ENUM('present', 'absent'),
+      type: DataTypes.ENUM("present", "absent"),
       allowNull: false,
-      defaultValue: 'absent'
+      defaultValue: "absent"
     },
     auto_marked: {
       type: DataTypes.BOOLEAN,
@@ -50,7 +46,7 @@ const Attendance = sequelize.define(
     indexes: [
       {
         unique: true,
-        fields: ['user_id', 'date']
+        fields: ["user_id", "date"]
       }
     ]
   }

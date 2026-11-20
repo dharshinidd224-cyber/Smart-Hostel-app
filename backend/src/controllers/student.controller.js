@@ -8,7 +8,7 @@ const {
 } = require("../models");
 
 const FLASK_URL =
-  process.env.FACE_SERVICE_URL || "http://localhost:5001";
+  process.env.FACE_SERVICE_URL || "http://127.0.0.1:5001";
 
 
 exports.registerStudent = async (req, res) => {

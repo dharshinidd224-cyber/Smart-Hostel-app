@@ -1,6 +1,6 @@
+
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
-
 
 const Student = sequelize.define(
   "Student",
@@ -38,19 +38,14 @@ const Student = sequelize.define(
     year: {
       type: DataTypes.INTEGER,
       allowNull: false
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
     }
   },
   {
     tableName: "students",
     timestamps: true,
-    createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
+    createdAt: "created_at",
+    updatedAt: "updated_at"
   }
 );
-// At the bottom of the Student model file, before module.exports
 
 module.exports = Student;

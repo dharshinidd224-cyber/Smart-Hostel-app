@@ -1,58 +1,34 @@
 
-const app = require("./src/app");
-const { sequelize } = require("./src/config/db");
 require("dotenv").config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-require('dotenv').config();
-const attendanceRoutes = require('./src/routes/attendance');
-const grievanceRoutes = require('./src/routes/grievanceRoutes');
+
+const { sequelize } = require("./src/models");
+const app = require("./src/app");
+
 const PORT = process.env.PORT || 5000;
 
-app.use(helmet());
-app.use(cors({
-  origin: [
-    'http://localhost:3000',           // For localhost development
-    'http://192.168.106.191:3000',     // For network access
-    'http://127.0.0.1:3000',
-    'http://10.62.62.163:3000'           // Alternative localhost
-  ],
-  credentials: true
-}));
-app.use(express.json());
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/grievances', grievanceRoutes);
+async function startServer() {
+  try {
+    // Step 1: Verify database connection
+    await sequelize.authenticate();
 
-app._router.stack.forEach((middleware) => {
-  if (middleware.route) {
-    console.log("ROUTE:", middleware.route.path);
-  } else if (middleware.name === 'router') {
-    middleware.handle.stack.forEach((handler) => {
-      if (handler.route) {
-        console.log("ROUTE:", handler.route.path);
-      }
+    console.log("SUCCESS: Connected to TiDB Cloud");
+
+    // Step 2: Create missing tables
+    await sequelize.sync();
+
+    console.log("SUCCESS: Database tables synchronized");
+
+    // Step 3: Start backend
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Backend running on port ${PORT}`);
+      console.log(`Local: http://localhost:${PORT}`);
     });
+
+  } catch (error) {
+    console.error("Backend startup failed:");
+    console.error(error);
+    process.exit(1);
   }
-});
+}
 
-app.set('trust proxy', true);
-
-sequelize.authenticate()
-  .then(() => {
-    console.log("MySQL connected");
-    return sequelize.sync();
-  })
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-  ✅ Server running on:
-  - Local:   http://localhost:${PORT}
-  - Network: http://192.168.106.191:${PORT}
-  `);
-});
-  })
-  .catch(err => {
-    console.error("❌ Database connection failed:");
-console.error(err);
-  });
+startServer();
