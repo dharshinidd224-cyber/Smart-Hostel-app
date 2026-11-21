@@ -56,7 +56,8 @@ const LoginForm = () => {
     return Object.keys(newErrors)?.length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  
+const handleSubmit = async (e) => {
   e.preventDefault();
 
   if (!validateForm()) return;
@@ -65,25 +66,60 @@ const LoginForm = () => {
   setErrors({});
 
   try {
+    console.log("🔄 Sending login request...");
+    console.log("College ID:", formData.userId);
+
     const res = await api.post("/auth/login", {
-      userId: formData.userId,
+      userId: formData.userId.trim(),
       password: formData.password
     });
 
+    console.log("✅ Login API response:", res.status);
+
     const token = res.data.token;
-    localStorage.setItem("token", token);
+
+    if (!token) {
+      throw new Error("Token was not received from backend");
+    }
 
     const payload = JSON.parse(atob(token.split(".")[1]));
+
+    console.log("✅ User authenticated");
+    console.log("User role:", payload.role);
+
+    // Check selected role against database role
+    if (payload.role !== formData.role) {
+      setErrors({
+        submit: `This account is registered as ${payload.role}. Please select the correct role.`
+      });
+      return;
+    }
+
+    localStorage.setItem("token", token);
 
     if (payload.role === "student") {
       navigate("/student-dashboard");
     } else if (payload.role === "warden") {
       navigate("/warden-dashboard");
+    } else {
+      localStorage.removeItem("token");
+      setErrors({
+        submit: "Unsupported account role."
+      });
     }
+
   } catch (err) {
+    console.error("❌ LOGIN ERROR:", err);
+    console.error("Backend response:", err.response?.data);
+    console.error("HTTP status:", err.response?.status);
+
     setErrors({
-      submit: "Invalid College ID or password."
+      submit:
+        err.response?.data?.message ||
+        err.message ||
+        "Unable to connect to the server."
     });
+
   } finally {
     setLoading(false);
   }

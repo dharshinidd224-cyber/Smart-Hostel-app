@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardNavigation from '../../components/navigation/DashboardNavigation';
 import BreadcrumbNavigation from '../../components/navigation/BreadcrumbNavigation';
@@ -6,20 +6,20 @@ import AttendanceStatusCard from './components/AttendanceStatusCard';
 import WiFiValidationCard from './components/WiFiValidationCard';
 import AttendanceHistoryWidget from './components/AttendanceHistoryWidget';
 import AttendancePolicyCard from './components/AttendancePolicyCard';
+import AttendanceModal from './components/AttendanceModal';
 import Icon from '../../components/AppIcon';
 import { resetTodayAttendance } from '../../utils/attendanceService';
 
-// ✅ Dynamic API URL - works for both localhost and network
-const API_URL = 'http://192.168.99.25:5000';
+// Use VITE_API_URL env var when available, otherwise localhost
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const MarkAttendance = () => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
-  //const [isMarked, setIsMarked] = useState(false);
   const [todayMarked, setIsMarkedToday] = useState(false);
   const [markedTime, setMarkedTime] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const [wifiStatus, setWifiStatus] = useState({
@@ -87,51 +87,57 @@ const MarkAttendance = () => {
   }, []);
 
   // ✅ Attendance history with dynamic API URL
-  useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        
-        if (!token) {
-          console.error('No token found');
-          return;
-        }
-
-        const res = await fetch(
-          `${API_URL}/api/attendance/history`, // ✅ Using API_URL
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
-
-        if (res.status === 401) {
-          console.error('Token expired or invalid');
-          localStorage.removeItem('token');
-          localStorage.removeItem('studentId');
-          localStorage.removeItem('userId');
-          navigate('/login');
-          return;
-        }
-
-        const data = await res.json();
-        console.log("Attendance API response:", data);
-
-
-        if (data.success) {
-          setAttendanceRecords(data.records);
-          setIsMarkedToday(data.todayMarked);   // ✅ backend truth
-  setCurrentStreak(data.currentStreak); 
-
-        }
-      } catch (error) {
-        console.error('Failed to fetch attendance:', error);
+  const fetchAttendance = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      
+      if (!token) {
+        console.error('No token found');
+        return;
       }
-    };
 
-    fetchAttendance();
+      const res = await fetch(
+        `${API_URL}/api/attendance/history`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (res.status === 401) {
+        console.error('Token expired or invalid');
+        localStorage.removeItem('token');
+        localStorage.removeItem('studentId');
+        localStorage.removeItem('userId');
+        navigate('/login');
+        return;
+      }
+
+      const data = await res.json();
+      console.log("Attendance API response:", data);
+
+      if (data.success) {
+        setAttendanceRecords(data.records);
+        setIsMarkedToday(data.todayMarked);
+        setCurrentStreak(data.currentStreak);
+
+        if (data.todayMarked && data.records?.length > 0) {
+          const today = new Date().toISOString().split('T')[0];
+          const todayRec = data.records.find(r => r.date === today && r.status === 'present');
+          if (todayRec && todayRec.time_marked) {
+            setMarkedTime(todayRec.time_marked);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    }
   }, [navigate]);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
 
   const formatDate = (date) => date?.toLocaleDateString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric'
@@ -141,60 +147,19 @@ const MarkAttendance = () => {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
   });
 
-  // ✅ Mark attendance with dynamic API URL
-  const handleMarkAttendance = async () => {
-    if (!wifiStatus.isValidNetwork || todayMarked || isLoading) {
-      if (!wifiStatus.isValidNetwork) {
-        alert(`⚠️ Connect to Hostel WiFi!\nCurrent IP: ${wifiStatus.clientIP}\nRequired: 192.168.100.x - 192.168.111.x`);
-      }
-      return;
+  // ✅ Open modal on Mark Present click
+  const handleMarkAttendance = () => {
+    if (todayMarked) return;
+    setShowAttendanceModal(true);
+  };
+
+  // ✅ Callback after successful two-step verification + attendance marking
+  const handleAttendanceMarked = (timeStr) => {
+    setIsMarkedToday(true);
+    if (timeStr) {
+      setMarkedTime(timeStr);
     }
-
-    setIsLoading(true);
-    setErrorMessage('');
-
-    try {
-      const studentId = localStorage.getItem('studentId') || 
-                        localStorage.getItem('userId') ;
-      
-      console.log('🔍 Marking attendance for:', studentId);
-      
-      const res = await fetch(`${API_URL}/api/attendance/mark`, { // ✅ Using API_URL
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({})
-      });
-
-      const data = await res.json();
-      console.log('📡 Backend response:', data);
-
-      /*if (res.status === 403) {
-        setErrorMessage(`WiFi Access Denied: ${data.currentIP}`);
-        alert(`❌ WiFi Blocked!\nIP: ${data.currentIP}\nRequired: Hostel WiFi (192.168.100.x - 192.168.111.x)`);
-        return;
-      }*/
-
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Attendance failed');
-        alert(data.error || 'Failed to mark attendance');
-        return;
-      }
-
-      // ✅ SUCCESS
-      const now = new Date();
-      setMarkedTime(formatTime(now));
-      setShowSuccessModal(true);
-      setTimeout(() => setShowSuccessModal(false), 4000);
-      
-    } catch (err) {
-      setErrorMessage('Backend not responding');
-      console.error('❌ Backend error:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    fetchAttendance();
   };
 
   const handleResetAttendance = async () => {
@@ -208,7 +173,7 @@ const MarkAttendance = () => {
     if (result.success) {
       setIsMarkedToday(false);
       setMarkedTime(null);
-      setShowSuccessModal(false);
+      setShowAttendanceModal(false);
 
       // Refresh attendance history/status
       window.location.reload();
@@ -381,29 +346,13 @@ const MarkAttendance = () => {
         </div>
       </div>
 
-      {/* Success Modal - Enhanced */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 max-w-md w-full border border-gray-100 animate-in zoom-in slide-in-from-bottom-4 duration-500">
-            <div className="text-center">
-              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/50 animate-in zoom-in duration-700">
-                <Icon name="CheckCircle2" size={48} color="white" />
-              </div>
-              <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
-                Attendance Marked!
-              </h3>
-              <p className="text-base md:text-lg text-gray-600 mb-6">
-                Your attendance has been successfully recorded for today at{' '}
-                <span className="font-semibold text-green-600">{markedTime}</span>.
-              </p>
-              <div className="flex items-center justify-center gap-2 bg-green-50 px-4 py-3 rounded-xl border border-green-200">
-                <Icon name="CheckCircle2" size={18} color="#16a34a" />
-                <span className="text-sm font-semibold text-green-700">You're all set for today</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Two-Step Verification Attendance Modal */}
+      <AttendanceModal
+        isOpen={showAttendanceModal}
+        onClose={() => setShowAttendanceModal(false)}
+        wifiStatus={wifiStatus}
+        onAttendanceMarked={handleAttendanceMarked}
+      />
     </div>
   );
 };

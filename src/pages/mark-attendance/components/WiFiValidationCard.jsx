@@ -6,7 +6,7 @@ const WiFiValidationCard = ({
   isConnected, 
   isValidNetwork, 
   networkName, 
-  onMarkAttendance, 
+  onMarkAttendance,   // now opens the modal
   isLoading,
   isMarked 
 }) => {
@@ -50,7 +50,7 @@ const WiFiValidationCard = ({
   };
 
   const status = getConnectionStatus();
-  const canMarkAttendance = isConnected && isValidNetwork && !isMarked;
+  const canMarkAttendance = !isMarked;
 
   return (
     <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 md:p-8 border border-gray-100">

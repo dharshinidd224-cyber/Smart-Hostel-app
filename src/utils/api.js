@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const API_URL = "http://192.168.99.25:5000";
+// Use VITE_API_URL env var if set, otherwise fall back to localhost.
+// To point to a different machine set VITE_API_URL in a .env file at the
+// project root, e.g.:  VITE_API_URL=http://192.168.1.50:5000
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 console.log("🔥 ACTUAL API URL:", API_URL);
 

@@ -87,36 +87,77 @@ exports.me = async (req, res) => {
 
 
 
+
 exports.login = async (req, res) => {
-  console.log('📥 Login Request Body:', req.body);  // Add this line
-  console.log('📥 user_id:', req.body.user_id);  
-  const { userId, password } = req.body;
+  try {
+    const { userId, password } = req.body;
 
-  const user = await User.findOne({
-    where: { user_id: userId }
-  });
+    console.log("LOGIN REQUEST:", userId);
 
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
+    if (!userId || !password) {
+      return res.status(400).json({
+        message: "College ID and password are required"
+      });
+    }
+
+    const user = await User.findOne({
+      where: {
+        user_id: userId.trim()
+      }
+    });
+
+    if (!user) {
+      console.log("USER NOT FOUND");
+
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    console.log("USER FOUND:", user.user_id);
+
+    const isMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    console.log("PASSWORD MATCH:", isMatch);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid credentials"
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is missing");
+    }
+
+    const token = jwt.sign(
+      {
+        user_id: user.user_id,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    console.log("LOGIN SUCCESSFUL");
+
+    return res.status(200).json({
+      success: true,
+      token
+    });
+
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+
+    return res.status(500).json({
+      message: "Internal server error"
+    });
   }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-
-  const token = jwt.sign(
-  {
-    user_id: user.user_id, // CS123456 / STAFF1234
-    role: user.role
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
-
-
-  res.json({ token });
 };
+
 
 
 

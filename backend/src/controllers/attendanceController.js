@@ -1,5 +1,7 @@
-const { Attendance, Student } = require("../models");
+const { Attendance, Student, FaceEmbedding } = require("../models");
 const { Op } = require("sequelize");
+
+const FLASK_URL = process.env.FACE_SERVICE_URL || "http://127.0.0.1:5001";
 
 // ✅ IMPROVED IP EXTRACTION - Checks ALL possible sources
 const getClientIp = (req) => {
@@ -413,6 +415,92 @@ exports.autoMarkAbsent = async (req, res) => {
     return res.status(500).json({ 
       success: false,
       error: error.message 
+    });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACE VERIFICATION FOR ATTENDANCE
+// POST /api/attendance/verify-face
+//
+// Security:  Student identity is taken exclusively from the verified JWT
+//            (req.user.user_id).  The frontend never supplies a student_id.
+//
+// Flow:
+//   1. Resolve user_id → student record → face_embeddings rows
+//   2. Forward the live image + stored embeddings to Flask /verify-face
+//   3. Return the Flask result directly (no attendance is written here)
+// ─────────────────────────────────────────────────────────────────────────────
+exports.verifyFaceForAttendance = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🔍 FACE VERIFICATION REQUEST - User: ${userId}`);
+    console.log(`${'='.repeat(60)}`);
+
+    const { image } = req.body;
+
+    if (!image) {
+      return res.status(400).json({
+        success: false,
+        message: "No face image provided."
+      });
+    }
+
+    // ── 1. Fetch the student record ──────────────────────────────────────────
+    const student = await Student.findOne({ where: { user_id: userId } });
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student profile not found."
+      });
+    }
+
+    // ── 2. Fetch stored face embeddings ─────────────────────────────────────
+    const embeddingRows = await FaceEmbedding.findAll({
+      where: { student_id: student.id },
+      attributes: ["embedding"]
+    });
+
+    if (!embeddingRows || embeddingRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No face data registered. Please register your face first."
+      });
+    }
+
+    const storedEmbeddings = embeddingRows.map(row => {
+      return typeof row.embedding === 'string' ? JSON.parse(row.embedding) : row.embedding;
+    });
+    console.log(`   Found ${storedEmbeddings.length} stored embeddings for student ${student.id}`);
+
+    // ── 3. Call Flask /verify-face ───────────────────────────────────────────
+    const flaskResponse = await fetch(`${FLASK_URL}/verify-face`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image,
+        embeddings: storedEmbeddings
+      })
+    });
+
+    if (!flaskResponse.ok) {
+      throw new Error(`Face service HTTP error: ${flaskResponse.status}`);
+    }
+
+    const result = await flaskResponse.json();
+
+    console.log(`   Flask result: success=${result.success}, score=${result.score}`);
+    console.log(`${'='.repeat(60)}\n`);
+
+    return res.status(result.success ? 200 : 401).json(result);
+
+  } catch (error) {
+    console.error(`\n❌ ERROR verifying face:`, error);
+    return res.status(500).json({
+      success: false,
+      message: "Face verification service error. Please try again."
     });
   }
 };
